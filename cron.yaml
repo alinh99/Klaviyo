@@ -1,0 +1,5 @@
+cron:
+- description: append klaviyo data
+  url: /append_klaviyo_data
+  schedule: every 24 hours
+  target: default

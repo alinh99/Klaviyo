@@ -1,0 +1,10 @@
+tzlocal
+pandas
+requests
+python-dotenv
+google-cloud-bigquery
+Flask
+gunicorn
+pyarrow
+google-cloud-storage
+python-dotenv
