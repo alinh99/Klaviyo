@@ -1,1 +1,6 @@
-runtime: python310
+runtime: python39
+
+readiness_check:
+  app_start_timeout_sec: 600
+
+entrypoint: gunicorn -t 600 -b :$PORT main:app

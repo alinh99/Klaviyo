@@ -7,4 +7,6 @@ Flask
 gunicorn
 pyarrow
 google-cloud-storage
+google-cloud-bigquery-storage
 python-dotenv
+pandas_gbq
