@@ -9,9 +9,7 @@ from datetime import datetime
 import tzlocal
 import traceback
 import sys
-import pandas_gbq
 import logging
-from google.cloud.bigquery_storage import BigQueryReadClient, types
 
 # Run flask app with one default URL and other with 'append_data' which will be scheduled
 app = Flask(__name__)
@@ -194,6 +192,7 @@ def append_klaviyo_data():
         )
         job.result()
         print(f"Loaded {klaviyo_df.shape[0]} rows into {temp_table_name}")
+        logging.info(f"Loaded {klaviyo_df.shape[0]} rows into {temp_table_name}")
 
         # Remove duplicates from klaviyo table
         dedup_query = f"""
@@ -203,7 +202,7 @@ def append_klaviyo_data():
         dedup_job = client.query(dedup_query)
         dedup_job.result()
         print(f"Removed duplicates from {table_name}")
-
+        logging.info(f"Removed duplicates from {table_name}")
         # Merge new data into klaviyo table
         merge_query = f"""
         INSERT INTO `{project_id}.{dataset_id}.{table_name}`
@@ -215,10 +214,12 @@ def append_klaviyo_data():
         merge_job = client.query(merge_query)
         merge_job.result()
         print(f"Merged data from {temp_table_name} into {table_name}")
+        logging.info(f"Merged data from {temp_table_name} into {table_name}")
 
         # Delete the temp_klaviyo table
         client.delete_table(f"{project_id}.{dataset_id}.{temp_table_name}")
         print(f"Deleted table {temp_table_name}")
+        logging.info(f"Deleted table {temp_table_name}")
 
         return "Klaviyo Results Logged!"
     except Exception as ex:
