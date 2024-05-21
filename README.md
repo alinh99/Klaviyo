@@ -10,9 +10,11 @@
 
 ## Deploy to Google Cloud
 
-### Step 1: Open command line and enter the command below
+### Step 1:
+`Edit the code from the function "append_klaviyo_data" from main.py file`
+
+### Step 2:
 `$ gcloud app deploy`
 
-### Step 2: Configure the code from the function "append_klaviyo_data" from main.py file
-
-### Step 3: Open the link from the command: Deployed service [default] to [link/append_klaviyo_data] to test the deployment
+### Step 3:
+`Open the link from the command: Deployed service [default] to [link/append_klaviyo_data] to test the deployment`
