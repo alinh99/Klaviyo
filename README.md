@@ -13,7 +13,7 @@
 ### Step 1:
 `Edit the code from the function "append_klaviyo_data" from main.py file`
 
-### Step 2:
+### Step 2: Open the command line and enter the command below
 `$ gcloud app deploy`
 
 ### Step 3:
