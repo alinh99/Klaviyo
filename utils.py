@@ -1,6 +1,6 @@
 import requests
 
-def get_subscribers(url: str, klaviyo_api_key: str):
+def get_subscribers(url: str, klaviyo_api_key: str)-> dict:
     """Get subscribers for counting"""
     headers = {
         "accept": "application/json",
@@ -14,7 +14,7 @@ def get_subscribers(url: str, klaviyo_api_key: str):
 
 def get_metrics(
     by: list, metric_id: str, url: str, measurement: list, filter: list, klaviyo_api_key
-: str):
+: str) -> list:
     """Get Post Aggregate Metrics"""
     try:
         headers = {
@@ -44,7 +44,7 @@ def get_metrics(
         return str(e)
 
 
-def get_pagination_metrics(url: str, klaviyo_api_key: str):
+def get_pagination_metrics(url: str, klaviyo_api_key: str) -> list:
     """Get Metrics With Pagination Data"""
     try:
         metrics = []
@@ -64,15 +64,10 @@ def get_pagination_metrics(url: str, klaviyo_api_key: str):
         return str(e)
 
 
-def calculate_rate_metric(metric_a: float, metric_b: float):
+def calculate_rate_metric(metric_a: float, metric_b: float) -> float:
     """Rate Calculation"""
     try:
         result = (metric_a / metric_b) * 100
         return result
     except ZeroDivisionError:
         return 0.0
-    # if metric_b == 0:
-    #     result = 0.0
-    # else:
-    #     result = (metric_a / metric_b) * 100
-    # return result

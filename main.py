@@ -30,20 +30,6 @@ def hello_klaviyo():
         return str(e)
 
 
-def safe_float_conversion(value, default=""):
-    try:
-        return float(value)
-    except (ValueError, TypeError):
-        return default
-
-
-def safe_int_conversion(value, default=0):
-    try:
-        return int(value)
-    except (ValueError, TypeError):
-        return default
-
-
 @app.route("/append_klaviyo_data")
 def append_klaviyo_data():
     """Return a friendly HTTP greeting."""
@@ -75,37 +61,28 @@ def append_klaviyo_data():
             + spam_email_count
             + dropped_email_count
         )
-        open_rate = str(
-            calculate_rate_metric(opened_email_count, delivered_email_count)
+        open_rate = calculate_rate_metric(opened_email_count, delivered_email_count)
+
+        click_rate = calculate_rate_metric(clicked_email_count, delivered_email_count)
+
+        unsubscribed_rate = calculate_rate_metric(unsubscribed_count, total_recipients)
+
+        bounce_rate = calculate_rate_metric(bounced_email_count, total_recipients)
+        delivery_rate = calculate_rate_metric(delivered_email_count, total_recipients)
+        conversion_active_on_site_rate = calculate_rate_metric(
+            conversion_active_on_site_count, delivered_email_count
         )
-        click_rate = str(
-            calculate_rate_metric(clicked_email_count, delivered_email_count)
+        conversion_viewed_product_rate = calculate_rate_metric(
+            conversion_viewed_product_count, delivered_email_count
         )
-        unsubscribed_rate = str(
-            calculate_rate_metric(unsubscribed_count, total_recipients)
+        revenue_per_email = (
+            revenue_count / delivered_email_count if delivered_email_count != 0 else 0
         )
-        bounce_rate = str(calculate_rate_metric(bounced_email_count, total_recipients))
-        delivery_rate = str(
-            calculate_rate_metric(delivered_email_count, total_recipients)
+        product_purchase_rate = calculate_rate_metric(
+            revenue_unique_count, delivered_email_unique_count
         )
-        conversion_active_on_site_rate = str(
-            calculate_rate_metric(
-                conversion_active_on_site_count, delivered_email_count
-            )
-        )
-        conversion_viewed_product_rate = str(
-            calculate_rate_metric(
-                conversion_viewed_product_count, delivered_email_count
-            )
-        )
-        revenue_per_email = str(
-            (revenue_count / delivered_email_count if delivered_email_count != 0 else 0)
-        )
-        product_purchase_rate = str(
-            calculate_rate_metric(revenue_unique_count, delivered_email_unique_count)
-        )
-        average_order_value = str(
-            (total_revenue_count / total_order_count if total_order_count != 0 else 0)
+        average_order_value = (
+            total_revenue_count / total_order_count if total_order_count != 0 else 0
         )
 
         local_timezone = tzlocal.get_localzone()
@@ -134,22 +111,20 @@ def append_klaviyo_data():
         schema = [
             bigquery.SchemaField("date", "STRING"),
             bigquery.SchemaField("title", "STRING"),
-            bigquery.SchemaField("open_rate", "STRING"),
-            bigquery.SchemaField("click_rate", "STRING"),
-            bigquery.SchemaField("unsubscribed_rate", "STRING"),
-            bigquery.SchemaField("bounce_rate", "STRING"),
-            bigquery.SchemaField("delivery_rate", "STRING"),
-            bigquery.SchemaField("conversion_rate", "STRING"),
-            bigquery.SchemaField("revenue_per_email", "STRING"),
-            bigquery.SchemaField("product_purchase_rate", "STRING"),
-            bigquery.SchemaField("average_order_value", "STRING"),
+            bigquery.SchemaField("open_rate", "FLOAT"),
+            bigquery.SchemaField("click_rate", "FLOAT"),
+            bigquery.SchemaField("unsubscribed_rate", "FLOAT"),
+            bigquery.SchemaField("bounce_rate", "FLOAT"),
+            bigquery.SchemaField("delivery_rate", "FLOAT"),
+            bigquery.SchemaField("conversion_rate", "FLOAT"),
+            bigquery.SchemaField("revenue_per_email", "FLOAT"),
+            bigquery.SchemaField("product_purchase_rate", "FLOAT"),
+            bigquery.SchemaField("average_order_value", "FLOAT"),
             bigquery.SchemaField("new_subscribers", "INTEGER"),
             bigquery.SchemaField("subscriber_counts", "INTEGER"),
         ]
 
         klaviyo_df = pd.DataFrame(results)
-        klaviyo_df = klaviyo_df.drop_duplicates()
-        klaviyo_df.drop_duplicates(inplace=True)
 
         # Check if the table exists, create if not
         table_ref = client.dataset(dataset_id).table(table_name)
@@ -194,27 +169,44 @@ def append_klaviyo_data():
         print(f"Loaded {klaviyo_df.shape[0]} rows into {temp_table_name}")
         logging.info(f"Loaded {klaviyo_df.shape[0]} rows into {temp_table_name}")
 
-        # Remove duplicates from klaviyo table
+        # Merge the temp_klaviyo table into the main table
+        merge_query = f"""
+        MERGE `{project_id}.{dataset_id}.{table_name}` T
+        USING (SELECT DISTINCT * FROM `{project_id}.{dataset_id}.{temp_table_name}`) S
+        ON T.date = S.date AND T.title = S.title
+        WHEN MATCHED THEN
+            UPDATE SET
+                T.open_rate = S.open_rate,
+                T.click_rate = S.click_rate,
+                T.unsubscribed_rate = S.unsubscribed_rate,
+                T.bounce_rate = S.bounce_rate,
+                T.delivery_rate = S.delivery_rate,
+                T.conversion_rate = S.conversion_rate,
+                T.revenue_per_email = S.revenue_per_email,
+                T.product_purchase_rate = S.product_purchase_rate,
+                T.average_order_value = S.average_order_value,
+                T.new_subscribers = S.new_subscribers,
+                T.subscriber_counts = S.subscriber_counts
+        WHEN NOT MATCHED THEN
+            INSERT (date, title, open_rate, click_rate, unsubscribed_rate, delivery_rate, bounce_rate, conversion_rate, revenue_per_email, product_purchase_rate, average_order_value, new_subscribers, subscriber_counts)
+            VALUES (S.date, S.title, S.open_rate, S.click_rate, S.unsubscribed_rate, S.delivery_rate, S.bounce_rate, S.conversion_rate, S.revenue_per_email, S.product_purchase_rate, S.average_order_value, S.new_subscribers, S.subscriber_counts);
+        """
+
+        merge_job = client.query(merge_query)
+        merge_job.result()
+        print(f"Merged data from {temp_table_name} into {table_name}")
+        logging.info(f"Merged data from {temp_table_name} into {table_name}")
+
+        # Remove duplicates (if any) from the table
         dedup_query = f"""
         CREATE OR REPLACE TABLE `{project_id}.{dataset_id}.{table_name}` AS
-        SELECT DISTINCT * FROM `{project_id}.{dataset_id}.{table_name}`;
+        SELECT DISTINCT date, title, open_rate, click_rate, unsubscribed_rate, delivery_rate, bounce_rate, conversion_rate, revenue_per_email, product_purchase_rate, average_order_value, new_subscribers, subscriber_counts
+        FROM `{project_id}.{dataset_id}.{table_name}`;
         """
         dedup_job = client.query(dedup_query)
         dedup_job.result()
         print(f"Removed duplicates from {table_name}")
         logging.info(f"Removed duplicates from {table_name}")
-        # Merge new data into klaviyo table
-        merge_query = f"""
-        INSERT INTO `{project_id}.{dataset_id}.{table_name}`
-        SELECT * FROM `{project_id}.{dataset_id}.{temp_table_name}`
-        WHERE CONCAT(date, ',', title) NOT IN (
-            SELECT CONCAT(date, ',', title) FROM `{project_id}.{dataset_id}.{table_name}`
-        );
-        """
-        merge_job = client.query(merge_query)
-        merge_job.result()
-        print(f"Merged data from {temp_table_name} into {table_name}")
-        logging.info(f"Merged data from {temp_table_name} into {table_name}")
 
         # Delete the temp_klaviyo table
         client.delete_table(f"{project_id}.{dataset_id}.{temp_table_name}")
@@ -231,7 +223,7 @@ def append_klaviyo_data():
                 f"File : {trace[0]} , Line : {trace[1]}, Func.Name : {trace[2]}, Message : {trace[3]}, Exception type: {ex_type}, Exception message: {ex_value}"
             )
         logging.error(
-            f"File : {trace[0]} , Line : {trace[1]}, Func.Name : {trace[2]}, Message : {trace[3]}, Exception type: {ex_type}, Exception message: {ex_value}"
+            f"File : {stack_trace[0]} , Line : {stack_trace[1]}, Func.Name : {stack_trace[2]}, Message : {stack_trace[3]}, Exception type: {ex_type}, Exception message: {ex_value}"
         )
         return str(stack_trace)
 

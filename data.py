@@ -286,6 +286,7 @@ def get_data() -> list:
                         #     new_subscriber_data, key=lambda subscriber: get_consent_timestamp(subscriber, local_timezone)
                         # )
                         new_subscriber_count += len(new_subscriber_data)
+                        print()
 
             if stat["attributes"]["name"] == "Unsubscribed from List":
                 unsubscribed_url = f"{klaviyo_url}/profiles/?additional-fields[profile]=subscriptions&fields[profile]=title&page[size]=100"
