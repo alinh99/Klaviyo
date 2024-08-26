@@ -126,6 +126,7 @@ def get_data() -> list:
         revenue_count = int(0)
         new_subscriber = int(0)
         subscriber_today = int(0)
+        subscriber_before_today = int(0)
         new_subscribers = []
         revenues = []
         delivered_emails = []
@@ -140,13 +141,14 @@ def get_data() -> list:
         revenue_uniques = []
         total_orders = []
         total_revenues = []
+        
+        unsubscriber_count_today = 0
 
         local_timezone = tzlocal.get_localzone()
 
         current_time = datetime.now(local_timezone)
         cutoff_time = datetime(
-            current_time.
-            year,
+            current_time.year,
             current_time.month,
             current_time.day,
             23,
@@ -156,9 +158,10 @@ def get_data() -> list:
             tzinfo=local_timezone,
         )
         # cutoff_time = datetime(
-        #     2024,
-        #     6,
-        #     25,
+        #     cutoff_time.
+        #     year,
+        #     cutoff_time.month,
+        #     cutoff_time.day,
         #     23,
         #     59,
         #     59,
@@ -205,7 +208,7 @@ def get_data() -> list:
                     ["count"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
                 ))
@@ -221,7 +224,7 @@ def get_data() -> list:
                     ["unique"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
 
@@ -231,7 +234,7 @@ def get_data() -> list:
                         delivered_email_unique["measurements"]["unique"]
                     )
                 
-                logging.info("Get Received Email successfully")
+                logging.info(f"Get Received Email successfully on {cutoff_time.strftime('%Y-%m-%d')}")
             
             if stat["attributes"]["name"] == "Dropped Email":
                 dropped_emails.extend(get_metrics(
@@ -241,7 +244,7 @@ def get_data() -> list:
                     ["count"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
 
@@ -249,7 +252,7 @@ def get_data() -> list:
                 for dropped_email in dropped_emails:
                     dropped_email_count = sum(dropped_email["measurements"]["count"])
                 
-                logging.info("Get Dropped Email successfully")
+                logging.info(f"Get Dropped Email successfully on {cutoff_time.strftime('%Y-%m-%d')}")
             
             if stat["attributes"]["name"] == "Marked Email as Spam":
                 spam_emails.extend(get_metrics(
@@ -259,7 +262,7 @@ def get_data() -> list:
                     ["count"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
 
@@ -267,7 +270,7 @@ def get_data() -> list:
                 for spam_email in spam_emails:
                     spam_email_count = sum(spam_email["measurements"]["count"])
                 
-                logging.info("Get Spam Email successfully")
+                logging.info(f"Get Spam Email successfully on {cutoff_time.strftime('%Y-%m-%d')}")
             
             if stat["attributes"]["name"] == "Opened Email":
                 opened_emails.extend(get_metrics(
@@ -277,7 +280,7 @@ def get_data() -> list:
                     ["unique"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
 
@@ -286,7 +289,7 @@ def get_data() -> list:
                     # if opened_email["dimensions"] == ["UjjW7L"]: # ID of report
                     opened_email_count = sum(opened_email["measurements"]["unique"])
                 
-                logging.info("Get Opened Email successfully")
+                logging.info(f"Get Opened Email successfully on {cutoff_time.strftime('%Y-%m-%d')}")
                 
             if stat["attributes"]["name"] == "Clicked Email":
                 clicked_emails.extend(get_metrics(
@@ -296,7 +299,7 @@ def get_data() -> list:
                     ["unique"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
 
@@ -304,22 +307,31 @@ def get_data() -> list:
                 for clicked_email in clicked_emails:
                     clicked_email_count = sum(clicked_email["measurements"]["unique"])
                 
-                logging.info("Get Clicked Email successfully")
+                logging.info(f"Get Clicked Email successfully on {cutoff_time.strftime('%Y-%m-%d')}")
 
             if stat["attributes"]["name"] == "Unsubscribed from List":
                 unsubscribed_url = f"{klaviyo_url}/profiles/?additional-fields[profile]=subscriptions&fields[profile]=title&page[size]=100"
                 unsubscribed_data = get_pagination_metrics(unsubscribed_url, klaviyo_api_key)
 
                 for unsubscribed in unsubscribed_data:
+                    unsubscribed_consent = unsubscribed["attributes"]["subscriptions"]["email"]["marketing"]["consent"]
                     if (
-                        unsubscribed["attributes"]["subscriptions"]["email"]["marketing"][
-                            "consent"
-                        ]
-                        == "UNSUBSCRIBED"
+                        unsubscribed_consent == "UNSUBSCRIBED"
                     ):
                         unsubscribed_count += 1
+                    
+                    unsubscribed_consent_timestamp = unsubscribed["attributes"]["subscriptions"]["email"]["marketing"]["consent_timestamp"]
+                    if (
+                        unsubscribed_consent
+                        == "UNSUBSCRIBED"
+                    ) and unsubscribed_consent_timestamp != None:
+                        unsubscriber_updated_local = convert_to_local_timezone(unsubscribed_consent_timestamp, local_timezone)
+                        if unsubscriber_updated_local.strftime("%Y-%m-%d") == cutoff_time.strftime("%Y-%m-%d"):
+                            unsubscriber_count_today += 1
+                if unsubscriber_count_today != 0:
+                    new_subscriber = subscriber_today - subscriber_before_today - unsubscriber_count_today
                 
-                logging.info("Get Unsubscribed successfully")
+                logging.info(f"Get Unsubscribed successfully on {cutoff_time.strftime('%Y-%m-%d')}")
 
             if stat["attributes"]["name"] == "Bounced Email":
                 bounced_emails.extend(get_metrics(
@@ -329,14 +341,14 @@ def get_data() -> list:
                     ["unique"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
                 ))
                 for bounced_email in bounced_emails:
                     bounced_email_count = sum(bounced_email["measurements"]["unique"])
                 
-                logging.info("Get Bounced Email successfully")
+                logging.info(f"Get Bounced Email successfully on {cutoff_time.strftime('%Y-%m-%d')}")
                 
             if stat["attributes"]["name"] == "Viewed Product":
                 conversion_viewed_products.extend(get_metrics(
@@ -346,7 +358,7 @@ def get_data() -> list:
                     ["unique"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
                 ))
@@ -356,7 +368,7 @@ def get_data() -> list:
                             conversion_viewed_product["measurements"]["unique"]
                         )
                 
-                logging.info("Get Viewed Product successfully")
+                logging.info(f"Get Viewed Product successfully on {cutoff_time.strftime('%Y-%m-%d')}")
 
             if stat["attributes"]["name"] == "Active on Site":
                 conversion_active_on_sites.extend(get_metrics(
@@ -366,7 +378,7 @@ def get_data() -> list:
                     ["unique"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
                 ))
@@ -376,7 +388,7 @@ def get_data() -> list:
                             conversion_active_on_site["measurements"]["unique"]
                         )
                 
-                logging.info("Get Active on Site successfully")
+                logging.info(f"Get Active on Site successfully on {cutoff_time.strftime('%Y-%m-%d')}")
 
             if stat["attributes"]["name"] == "Placed Order":
                 revenues.extend( get_metrics(
@@ -386,7 +398,7 @@ def get_data() -> list:
                     ["sum_value"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                         'not(equals($attributed_message,""))',
                     ],
                     klaviyo_api_key
@@ -401,7 +413,7 @@ def get_data() -> list:
                     ["unique"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                         'not(equals($attributed_message,""))',
                     ],
                     klaviyo_api_key
@@ -409,7 +421,7 @@ def get_data() -> list:
                 for revenue_unique in revenue_uniques:
                     revenue_unique_count = sum(revenue_unique["measurements"]["unique"])
                 
-                logging.info("Get revenue successfully")
+                logging.info(f"Get revenue successfully on {cutoff_time.strftime('%Y-%m-%d')}")
                 
                 total_orders.extend( get_metrics(
                     ["$flow"],
@@ -418,14 +430,14 @@ def get_data() -> list:
                     ["count"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
                 ))
                 for total_order in total_orders:
                     total_order_count = sum(total_order["measurements"]["count"])
                 
-                logging.info("Get total_order successfully")
+                logging.info(f"Get total_order successfully on {cutoff_time.strftime('%Y-%m-%d')}")
 
                 total_revenues.extend( get_metrics(
                     ["$flow"],
@@ -434,14 +446,14 @@ def get_data() -> list:
                     ["sum_value"],
                     [
                         "greater-or-equal(datetime,2023-12-01)",
-                        f"less-than(datetime,{current_time.strftime('%Y-%m-%d')})",
+                        f"less-than(datetime,{cutoff_time.strftime('%Y-%m-%d')})",
                     ],
                     klaviyo_api_key
                 ))
                 for total_revenue in total_revenues:
                     total_revenue_count = sum(total_revenue["measurements"]["sum_value"])
                 
-                logging.info("Get total_revenue successfully")
+                logging.info(f"Get total_revenue successfully on {cutoff_time.strftime('%Y-%m-%d')}")
 
             if stat["attributes"]["name"] == "Subscribed to List":
                 segment_url = f"{klaviyo_url}/segments/?fields[segment]=name"
@@ -466,7 +478,7 @@ def get_data() -> list:
                 
                 new_subscriber = subscriber_today - subscriber_before_today
                 
-                logging.info("Get subscribers and new_subscribers successfully")
+                logging.info(f"Get subscribers and new_subscribers successfully on {cutoff_time.strftime('%Y-%m-%d')}")
         return [
             delivered_email_count,
             bounced_email_count,
