@@ -2,11 +2,13 @@ runtime: python39
 
 # Set timeout when starting the server
 readiness_check:
-  app_start_timeout_sec: 600
+  app_start_timeout_sec: 3600
 
-# Set my timezone
+# Set timezone
 env_variables:
   TZ: 'Asia/Bangkok'
 
-# Set timeout when running server
-entrypoint: gunicorn -t 600 -b :$PORT main:app
+# Set timeout and bind address when running the server
+entrypoint: gunicorn -t 3600 -b :$PORT main:app
+
+service: default

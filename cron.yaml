@@ -1,5 +1,6 @@
 cron:
 - description: append klaviyo data
   url: /append_klaviyo_data
-  schedule: every day 23:57
+  schedule: every day 23:54
   timezone: Asia/Bangkok
+  target: default

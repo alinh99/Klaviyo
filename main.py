@@ -20,7 +20,7 @@ dataset_id = os.environ.get("DATASET_ID", "")
 project_id = os.environ.get("PROJECT_ID", "")
 os.environ["GOOGLE_APPLICATION_CREDENTIALS"] = "klaviyo-423610-43cd801744ab.json"
 table_name = os.environ.get("TABLE_NAME", "")
-app.config["TIMEOUT"] = 600
+app.config["TIMEOUT"] = 1200
 
 @app.route("/")
 def hello_klaviyo():
@@ -34,6 +34,11 @@ def hello_klaviyo():
 def append_klaviyo_data():
     """Return a friendly HTTP greeting."""
     try:
+        local_timezone = tzlocal.get_localzone()
+        current_time = datetime.now(local_timezone)
+        # current_time = datetime(2024, 6, 25)
+        date = current_time.strftime("%Y-%m-%d")
+
         client = bigquery.Client()
         metrics = get_data()
         (
@@ -55,18 +60,15 @@ def append_klaviyo_data():
             new_subscriber_count,
         ) = metrics
 
+        print("Load data successfully")
+        logging.info("Load data successfully")
+
         total_recipients = (
-            delivered_email_count
-            + bounced_email_count
-            + spam_email_count
-            + dropped_email_count
+            delivered_email_count + bounced_email_count + spam_email_count + dropped_email_count
         )
         open_rate = calculate_rate_metric(opened_email_count, delivered_email_count)
-
         click_rate = calculate_rate_metric(clicked_email_count, delivered_email_count)
-
         unsubscribed_rate = calculate_rate_metric(unsubscribed_count, total_recipients)
-
         bounce_rate = calculate_rate_metric(bounced_email_count, total_recipients)
         delivery_rate = calculate_rate_metric(delivered_email_count, total_recipients)
         conversion_active_on_site_rate = calculate_rate_metric(
@@ -75,19 +77,14 @@ def append_klaviyo_data():
         conversion_viewed_product_rate = calculate_rate_metric(
             conversion_viewed_product_count, delivered_email_count
         )
-        revenue_per_email = (
-            revenue_count / delivered_email_count if delivered_email_count != 0 else 0
-        )
+        revenue_per_email = revenue_count / delivered_email_count if delivered_email_count != 0 else 0
         product_purchase_rate = calculate_rate_metric(
             revenue_unique_count, delivered_email_unique_count
         )
-        average_order_value = (
-            total_revenue_count / total_order_count if total_order_count != 0 else 0
-        )
+        average_order_value = total_revenue_count / total_order_count if total_order_count != 0 else 0
 
-        local_timezone = tzlocal.get_localzone()
-        current_time = datetime.now(local_timezone)
-        date = current_time.strftime("%m-%d-%Y")
+        print("Calculate data successfully")
+        logging.info("Calculate data successfully")
 
         results = {
             "date": [date, date],
@@ -172,15 +169,32 @@ def append_klaviyo_data():
         # Merge the temp_klaviyo table into the main table
         merge_query = f"""
         MERGE `{project_id}.{dataset_id}.{table_name}` T
-        USING (SELECT DISTINCT * FROM `{project_id}.{dataset_id}.{temp_table_name}`) S
+        USING (
+            SELECT
+                date,
+                title,
+                MAX(open_rate) AS open_rate,
+                MAX(click_rate) AS click_rate,
+                MAX(unsubscribed_rate) AS unsubscribed_rate,
+                MAX(delivery_rate) AS delivery_rate,
+                MAX(bounce_rate) AS bounce_rate,
+                MAX(conversion_rate) AS conversion_rate,
+                MAX(revenue_per_email) AS revenue_per_email,
+                MAX(product_purchase_rate) AS product_purchase_rate,
+                MAX(average_order_value) AS average_order_value,
+                MAX(new_subscribers) AS new_subscribers,
+                MAX(subscriber_counts) AS subscriber_counts
+            FROM `{project_id}.{dataset_id}.{temp_table_name}`
+            GROUP BY date, title
+        ) S
         ON T.date = S.date AND T.title = S.title
         WHEN MATCHED THEN
             UPDATE SET
                 T.open_rate = S.open_rate,
                 T.click_rate = S.click_rate,
                 T.unsubscribed_rate = S.unsubscribed_rate,
-                T.bounce_rate = S.bounce_rate,
                 T.delivery_rate = S.delivery_rate,
+                T.bounce_rate = S.bounce_rate,
                 T.conversion_rate = S.conversion_rate,
                 T.revenue_per_email = S.revenue_per_email,
                 T.product_purchase_rate = S.product_purchase_rate,
@@ -194,6 +208,7 @@ def append_klaviyo_data():
 
         merge_job = client.query(merge_query)
         merge_job.result()
+
         print(f"Merged data from {temp_table_name} into {table_name}")
         logging.info(f"Merged data from {temp_table_name} into {table_name}")
 
@@ -208,13 +223,8 @@ def append_klaviyo_data():
         print(f"Removed duplicates from {table_name}")
         logging.info(f"Removed duplicates from {table_name}")
 
-        # Delete the temp_klaviyo table
-        client.delete_table(f"{project_id}.{dataset_id}.{temp_table_name}")
-        print(f"Deleted table {temp_table_name}")
-        logging.info(f"Deleted table {temp_table_name}")
-
-        return "Klaviyo Results Logged!"
-    except Exception as ex:
+        return f"Klaviyo Results Logged on {date}!"
+    except Exception:
         ex_type, ex_value, ex_traceback = sys.exc_info()
         trace_back = traceback.extract_tb(ex_traceback)
         stack_trace = list()
@@ -222,13 +232,14 @@ def append_klaviyo_data():
             stack_trace.append(
                 f"File : {trace[0]} , Line : {trace[1]}, Func.Name : {trace[2]}, Message : {trace[3]}, Exception type: {ex_type}, Exception message: {ex_value}"
             )
+        stack_trace_message = "\n".join(stack_trace)
         logging.error(
-            f"File : {stack_trace[0]} , Line : {stack_trace[1]}, Func.Name : {stack_trace[2]}, Message : {stack_trace[3]}, Exception type: {ex_type}, Exception message: {ex_value}"
+            f"Exception type: {ex_type}, Exception message: {ex_value}\nStack trace:\n{stack_trace_message}"
         )
-        return str(stack_trace)
+        return f"Exception type: {ex_type}, Exception message: {ex_value}\nStack trace:\n{stack_trace_message}"
 
 if __name__ == "__main__":
     # This is used when running locally only. When deploying to Google App
     # Engine, a webserver process such as Gunicorn will serve the app. This
     # can be configured by adding an `entrypoint` to app.yaml.
-    app.run(host="127.0.0.1", port=8080, debug=True)
+    app.run(host="127.0.0.1", port=8080, debug=False)
