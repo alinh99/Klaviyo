@@ -127,6 +127,7 @@ def get_data() -> list:
         new_subscriber = int(0)
         subscriber_today = int(0)
         subscriber_before_today = int(0)
+        
         new_subscribers = []
         revenues = []
         delivered_emails = []
@@ -141,8 +142,6 @@ def get_data() -> list:
         revenue_uniques = []
         total_orders = []
         total_revenues = []
-        
-        unsubscriber_count_today = 0
 
         local_timezone = tzlocal.get_localzone()
 
@@ -152,9 +151,9 @@ def get_data() -> list:
             current_time.month,
             current_time.day,
             23,
-            59,
-            59,
-            59,
+            50,
+            0,
+            0,
             tzinfo=local_timezone,
         )
         # cutoff_time = datetime(
@@ -320,17 +319,6 @@ def get_data() -> list:
                     ):
                         unsubscribed_count += 1
                     
-                    unsubscribed_consent_timestamp = unsubscribed["attributes"]["subscriptions"]["email"]["marketing"]["consent_timestamp"]
-                    if (
-                        unsubscribed_consent
-                        == "UNSUBSCRIBED"
-                    ) and unsubscribed_consent_timestamp != None:
-                        unsubscriber_updated_local = convert_to_local_timezone(unsubscribed_consent_timestamp, local_timezone)
-                        if unsubscriber_updated_local.strftime("%Y-%m-%d") == cutoff_time.strftime("%Y-%m-%d"):
-                            unsubscriber_count_today += 1
-                if unsubscriber_count_today != 0:
-                    new_subscriber = subscriber_today - subscriber_before_today - unsubscriber_count_today
-                
                 logging.info(f"Get Unsubscribed successfully on {cutoff_time.strftime('%Y-%m-%d')}")
 
             if stat["attributes"]["name"] == "Bounced Email":
@@ -478,7 +466,7 @@ def get_data() -> list:
                 
                 new_subscriber = subscriber_today - subscriber_before_today
                 
-                logging.info(f"Get subscribers and new_subscribers successfully on {cutoff_time.strftime('%Y-%m-%d')}")
+                logging.info(f"Get subscribers: {subscriber_today} and new_subscribers: {new_subscriber} successfully on {cutoff_time.strftime('%Y-%m-%d')}")
         return [
             delivered_email_count,
             bounced_email_count,
